@@ -1,5 +1,7 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
+import fs from 'fs';
+import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
@@ -25,12 +27,34 @@ if (apiKey) {
   }
 }
 
+// Endpoint to download ready-to-extract cPanel production bundle (dist/)
+app.get('/api/download-cpanel-bundle', (req: Request, res: Response) => {
+  try {
+    const distPath = path.resolve(__dirname, 'dist');
+    if (!fs.existsSync(path.join(distPath, 'index.html'))) {
+      execSync('npm run build', { cwd: __dirname });
+    }
+    const htaccessSrc = path.resolve(__dirname, 'public', '.htaccess');
+    const htaccessDest = path.join(distPath, '.htaccess');
+    if (fs.existsSync(htaccessSrc) && !fs.existsSync(htaccessDest)) {
+      fs.copyFileSync(htaccessSrc, htaccessDest);
+    }
+
+    const archivePath = path.resolve(__dirname, 'webkat-cpanel-dist.tar.gz');
+    execSync(`tar -czf "${archivePath}" -C "${distPath}" .`, { cwd: __dirname });
+
+    res.download(archivePath, 'webkat-cpanel-dist.tar.gz');
+  } catch (err: any) {
+    console.error('Failed to create cPanel bundle:', err);
+    res.status(500).json({ error: 'Napaka pri pripravi paketa za cPanel.' });
+  }
+});
+
 // API endpoint for AI assistance (blog generation, SEO optimization, tags suggestion)
 app.post('/api/ai/assist', async (req: Request, res: Response) => {
   const { action, topic, currentContent, category } = req.body;
 
   if (!aiClient) {
-    // Return structured intelligent fallback if API key is not configured
     if (action === 'generate_outline') {
       return res.json({
         success: true,
@@ -47,7 +71,10 @@ app.post('/api/ai/assist', async (req: Request, res: Response) => {
         fallback: true,
         seoTitle: `${topic} – Analiza & Vpogled | WebKat`,
         metaDescription: `Vse o ${topic}: ključne novosti, tehnične specifikacije in praktični nasveti s področja gaminga in spletnega razvoja.`,
-        suggestedSlug: (topic || 'clanek').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+        suggestedSlug: (topic || 'clanek')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/(^-|-$)/g, ''),
         keywords: ['gaming', 'spletna stran', 'razvoj', 'hitrost', 'optimizacija'],
       });
     }
@@ -121,19 +148,25 @@ app.post('/api/contact', (req: Request, res: Response) => {
   const { name, email, phone, serviceType, message, budget } = req.body;
 
   if (!name || !email || !message) {
-    return res.status(400).json({ error: 'Prosimo, izpolnite vsa obvezna polja (ime, e-pošta, sporočilo).' });
+    return res
+      .status(400)
+      .json({ error: 'Prosimo, izpolnite vsa obvezna polja (ime, e-pošta, sporočilo).' });
   }
 
-  console.log(`[WebKat Povpraševanje] Novo sporočilo od ${name} (${email}, tel: ${phone || '/'}):`, {
-    serviceType,
-    budget,
-    message,
-    timestamp: new Date().toISOString(),
-  });
+  console.log(
+    `[WebKat Povpraševanje] Novo sporočilo od ${name} (${email}, tel: ${phone || '/'}):`,
+    {
+      serviceType,
+      budget,
+      message,
+      timestamp: new Date().toISOString(),
+    }
+  );
 
   return res.json({
     success: true,
-    message: 'Vaše povpraševanje je bilo uspešno prejeto! Žiga (WebKat) vas bo kontaktiral v roku 24 ur.',
+    message:
+      'Vaše povpraševanje je bilo uspešno prejeto! Žiga (WebKat) vas bo kontaktiral v roku 24 ur.',
   });
 });
 

@@ -853,21 +853,41 @@ export const CmsStudio: React.FC<CmsStudioProps> = ({
                 </p>
               </div>
 
+              <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/20 p-5 space-y-3">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Download className="w-4 h-4 text-emerald-400" />
+                  <span>Najhitrejša pot: Prenesi že zgrajeno mapo `dist` za cPanel (1 klik)</span>
+                </h3>
+                <p className="text-neutral-300">
+                  Ker AI Studio pri izvozu na GitHub prenese le izvorno kodo (brez zgrajene mape <code className="font-mono text-white">dist/</code>), lahko tukaj z enim klikom prenesete že zgrajeno produkcijsko arhivsko datoteko <code className="font-mono text-emerald-300">webkat-cpanel-dist.tar.gz</code>, jo v cPanelu naložite v mapo domene in kliknete <strong>Extract</strong>:
+                </p>
+                <div>
+                  <a
+                    href="/api/download-cpanel-bundle"
+                    download="webkat-cpanel-dist.tar.gz"
+                    className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2.5 text-xs font-bold text-neutral-950 hover:bg-emerald-400 transition-colors"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Prenesi pripravljene datoteke za cPanel (webkat-cpanel-dist.tar.gz)</span>
+                  </a>
+                </div>
+              </div>
+
               <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-5 space-y-4">
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
                   <GitBranch className="w-4 h-4 text-purple-400" />
-                  <span>2. Kako izvoziti kodo na GitHub in vaše gostovanje (Možnost 3)</span>
+                  <span>Avtomatska gradnja prek GitHub Actions (za `repositories/WebKat/dist`)</span>
                 </h3>
 
                 <ol className="list-decimal ml-5 space-y-2.5 text-neutral-300">
                   <li>
-                    <strong>Povezava z GitHubom:</strong> V zgornji vrstici vmesnika Google AI Studio kliknite na ikono <strong>GitHub (Export / Sync to GitHub)</strong> in ustvarite repozitorij (npr. <code className="font-mono text-white">webkat-portal</code>).
+                    V projekt je dodana skripta <code className="font-mono text-white">.github/workflows/build-dist.yml</code>. Ko v AI Studiu kliknete <strong>Sync to GitHub</strong>, bo GitHub Actions v ~40 sekundah samodejno zgradil mapo <code className="font-mono text-white">dist/</code> in jo shranil v vaš GitHub repozitorij.
                   </li>
                   <li>
-                    <strong>Avtentikacija za vašo domeno:</strong> V <a href="https://console.firebase.google.com/project/sanguine-transit-t5v9p/authentication/settings" target="_blank" rel="noreferrer" className="text-cyan-400 underline">Firebase Console → Authentication → Settings → Authorized domains</a> dodajte svojo domeno <code className="font-mono text-white">webkat.si</code>, da bo Google prijava delovala tudi na vaši domeni.
+                    Nato v cPanelu pod <strong>Git™ Version Control → Urejanje → Pull or Deploy</strong> kliknite <strong>Update from Remote</strong>.
                   </li>
                   <li>
-                    <strong>Prenos na cPanel (public_html):</strong> Na svojem računalniku ali v cPanelu zaženite spodnji ukaz za gradnjo produkcijske mape <code className="font-mono text-white">dist/</code> in njeno vsebino naložite v <code className="font-mono text-white">public_html</code>:
+                    Ne pozabite v <a href="https://console.firebase.google.com/project/sanguine-transit-t5v9p/authentication/settings" target="_blank" rel="noreferrer" className="text-cyan-400 underline">Firebase Console → Authentication → Settings → Authorized domains</a> dodati domene <code className="font-mono text-white">ai.webkat.si</code> in <code className="font-mono text-white">webkat.si</code>.
                   </li>
                 </ol>
 
