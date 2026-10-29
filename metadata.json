@@ -1,0 +1,6 @@
+{
+  "name": "WebKat – Gaming & Developer Hub",
+  "description": "Sodobna gaming in spletna razvojna platforma z vgrajenim blogom, svežimi novicami iz sveta iger, naprednim SEO ter predstavitvijo spletnih storitev WebKat.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
