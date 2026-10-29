@@ -1,6 +1,16 @@
 import React, { useState, useEffect } from 'react';
+import { onAuthStateChanged, User } from 'firebase/auth';
 import { BlogPost, Comment } from './types';
 import { INITIAL_POSTS } from './data/initialPosts';
+import {
+  auth,
+  isUserAdmin,
+  subscribeToPublishedPosts,
+  savePostToFirestore,
+  deletePostFromFirestore,
+  updatePostLikesInFirestore,
+  seedInitialPostsToFirestore,
+} from './firebase';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { BlogFeed } from './components/BlogFeed';
@@ -15,7 +25,6 @@ const STORAGE_KEY_LIKES = 'webkat_liked_ids_v1';
 const STORAGE_KEY_BOOKMARKS = 'webkat_bookmarked_ids_v1';
 
 export default function App() {
-  // Load posts from localStorage or initialize with INITIAL_POSTS
   const [posts, setPosts] = useState<BlogPost[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_POSTS);
@@ -27,6 +36,10 @@ export default function App() {
     }
     return INITIAL_POSTS;
   });
+
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState<boolean>(false);
+  const [isCloudSynced, setIsCloudSynced] = useState<boolean>(false);
 
   const [selectedPost, setSelectedPost] = useState<BlogPost | null>(null);
   const [currentTab, setCurrentTab] = useState<string>('domov');
@@ -55,7 +68,41 @@ export default function App() {
     budget: '',
   });
 
-  // Save posts to storage whenever updated
+  // 1. Track Firebase Auth state
+  useEffect(() => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      setAuthReady(true);
+    });
+    return () => unsubscribeAuth();
+  }, []);
+
+  // 2. Subscribe to Firestore published posts once auth is ready
+  useEffect(() => {
+    if (!authReady) return;
+
+    const unsubscribePosts = subscribeToPublishedPosts((cloudPosts) => {
+      if (cloudPosts.length > 0) {
+        setIsCloudSynced(true);
+        // Merge initial posts that might not yet be in Firestore so the portal is always rich
+        const cloudIds = new Set(cloudPosts.map((p) => p.id));
+        const remainingInitial = INITIAL_POSTS.filter((ip) => !cloudIds.has(ip.id));
+        const combined = [...cloudPosts, ...remainingInitial];
+        setPosts(combined);
+      } else {
+        // If database is empty and admin is logged in, automatically seed initial posts
+        if (currentUser && isUserAdmin(currentUser)) {
+          seedInitialPostsToFirestore(INITIAL_POSTS).catch((err) => {
+            console.warn('Auto-seed skipped:', err);
+          });
+        }
+      }
+    });
+
+    return () => unsubscribePosts();
+  }, [authReady, currentUser]);
+
+  // Save posts to local cache as well
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_POSTS, JSON.stringify(posts));
@@ -64,7 +111,6 @@ export default function App() {
     }
   }, [posts]);
 
-  // Save likes and bookmarks
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_LIKES, JSON.stringify(Array.from(likedPostIds)));
@@ -77,7 +123,7 @@ export default function App() {
     } catch (e) {}
   }, [bookmarkedPostIds]);
 
-  // Handle Likes
+  // Handle Likes (local + Firestore if signed in)
   const handleLikePost = (postId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const isCurrentlyLiked = likedPostIds.has(postId);
@@ -96,9 +142,13 @@ export default function App() {
       prev.map((p) => {
         if (p.id === postId) {
           const delta = isCurrentlyLiked ? -1 : 1;
-          const updated = { ...p, likes: Math.max(0, p.likes + delta) };
+          const newLikes = Math.max(0, p.likes + delta);
+          const updated = { ...p, likes: newLikes };
           if (selectedPost?.id === postId) {
             setSelectedPost(updated);
+          }
+          if (currentUser && isCloudSynced) {
+            updatePostLikesInFirestore(postId, newLikes).catch(() => {});
           }
           return updated;
         }
@@ -121,8 +171,8 @@ export default function App() {
     });
   };
 
-  // Handle Comments
-  const handleAddComment = (postId: string, comment: Comment) => {
+  // Handle Local Fallback Comments
+  const handleAddLocalComment = (postId: string, comment: Comment) => {
     setPosts((prev) =>
       prev.map((p) => {
         if (p.id === postId) {
@@ -141,8 +191,13 @@ export default function App() {
     );
   };
 
-  // CMS Handlers
-  const handleSavePost = (savedPost: BlogPost) => {
+  // CMS Handlers (Firestore + local state)
+  const handleSavePost = async (savedPost: BlogPost, isExisting: boolean) => {
+    if (currentUser && isUserAdmin(currentUser)) {
+      await savePostToFirestore(savedPost, isExisting);
+      setIsCloudSynced(true);
+    }
+
     setPosts((prev) => {
       const exists = prev.some((p) => p.id === savedPost.id);
       if (exists) {
@@ -155,16 +210,20 @@ export default function App() {
     }
   };
 
-  const handleDeletePost = (postId: string) => {
+  const handleDeletePost = async (postId: string) => {
+    if (currentUser && isUserAdmin(currentUser)) {
+      await deletePostFromFirestore(postId);
+    }
     setPosts((prev) => prev.filter((p) => p.id !== postId));
     if (selectedPost?.id === postId) {
       setSelectedPost(null);
     }
   };
 
-  const handleResetPosts = () => {
-    setPosts(INITIAL_POSTS);
-    localStorage.removeItem(STORAGE_KEY_POSTS);
+  const handleSeedCloudPosts = async (): Promise<number> => {
+    const count = await seedInitialPostsToFirestore(INITIAL_POSTS);
+    setIsCloudSynced(true);
+    return count;
   };
 
   // Tab and navigation handling
@@ -181,7 +240,6 @@ export default function App() {
     });
     setSelectedPost(null);
     setCurrentTab('kontakt');
-    // Scroll down to contact
     setTimeout(() => {
       const el = document.getElementById('contact-section');
       if (el) el.scrollIntoView({ behavior: 'smooth' });
@@ -203,6 +261,7 @@ export default function App() {
         {selectedPost ? (
           <ArticleView
             post={selectedPost}
+            currentUser={currentUser}
             onBack={() => {
               setSelectedPost(null);
               window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -211,7 +270,7 @@ export default function App() {
             isLiked={likedPostIds.has(selectedPost.id)}
             isBookmarked={bookmarkedPostIds.has(selectedPost.id)}
             onToggleBookmark={handleToggleBookmark}
-            onAddComment={handleAddComment}
+            onAddLocalComment={handleAddLocalComment}
             allPosts={posts}
             onSelectRelated={(related) => setSelectedPost(related)}
           />
@@ -295,13 +354,15 @@ export default function App() {
         )}
       </main>
 
-      {/* Built-in CMS & AI Studio Modal */}
+      {/* Built-in Cloud CMS & AI Studio Modal */}
       {cmsOpen && (
         <CmsStudio
           posts={posts}
+          currentUser={currentUser}
+          isCloudSynced={isCloudSynced}
           onSavePost={handleSavePost}
           onDeletePost={handleDeletePost}
-          onResetPosts={handleResetPosts}
+          onSeedCloudPosts={handleSeedCloudPosts}
           onClose={() => setCmsOpen(false)}
         />
       )}

@@ -20,11 +20,13 @@ export interface BlogPost {
   publishedAt: string;
   author: string;
   authorRole: string;
+  authorId?: string;
   tags: string[];
   likes: number;
   views: number;
   featured?: boolean;
   coverTheme: 'vice' | 'tactical' | 'cyber' | 'speed' | 'code' | 'hardware';
+  status?: 'published' | 'archived';
   comments?: Comment[];
 }
 

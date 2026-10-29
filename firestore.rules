@@ -1,0 +1,195 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net: Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerifiedUser() && request.auth.token.email == 'srdicziga@gmail.com';
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        request.auth.token.email == 'srdicziga@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Validation Blueprints (Pillar 2: Anti-Update-Gap)
+    function isValidAdmin(data) {
+      return data.keys().hasAll(['uid', 'role', 'createdAt']) &&
+        data.keys().hasOnly(['uid', 'role', 'createdAt']) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 && data.uid.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.uid == request.auth.uid &&
+        data.role is string && data.role.size() >= 5 && data.role.size() <= 10 && data.role == 'admin' &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidPost(data) {
+      return data.keys().hasAll([
+          'id', 'slug', 'title', 'summary', 'content', 'category', 'categoryLabel',
+          'readTime', 'publishedAt', 'author', 'authorRole', 'authorId', 'tags',
+          'likes', 'views', 'coverTheme', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'slug', 'title', 'summary', 'content', 'category', 'categoryLabel',
+          'readTime', 'publishedAt', 'author', 'authorRole', 'authorId', 'tags',
+          'likes', 'views', 'coverTheme', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        data.id is string && data.id.size() >= 1 && data.id.size() <= 128 && data.id.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.slug is string && data.slug.size() >= 1 && data.slug.size() <= 160 && data.slug.matches('^[a-z0-9\\-]+$') &&
+        data.title is string && data.title.size() >= 3 && data.title.size() <= 200 &&
+        data.summary is string && data.summary.size() >= 5 && data.summary.size() <= 500 &&
+        data.content is string && data.content.size() >= 10 && data.content.size() <= 50000 &&
+        data.category is string && data.category.size() >= 3 && data.category.size() <= 20 &&
+        (data.category == 'gaming' || data.category == 'webdev' || data.category == 'seo' || data.category == 'hardware') &&
+        data.categoryLabel is string && data.categoryLabel.size() >= 2 && data.categoryLabel.size() <= 50 &&
+        data.readTime is string && data.readTime.size() >= 2 && data.readTime.size() <= 40 &&
+        data.publishedAt is string && data.publishedAt.size() >= 2 && data.publishedAt.size() <= 60 &&
+        data.author is string && data.author.size() >= 2 && data.author.size() <= 100 &&
+        data.authorRole is string && data.authorRole.size() >= 2 && data.authorRole.size() <= 120 &&
+        data.authorId is string && data.authorId.size() >= 1 && data.authorId.size() <= 128 && data.authorId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.tags is list && data.tags.size() <= 10 &&
+        (data.tags.size() == 0 || (data.tags.size() > 0 && data.tags[0] is string && data.tags[0].size() >= 1 && data.tags[0].size() <= 50)) &&
+        data.likes is int && data.likes >= 0 &&
+        data.views is int && data.views >= 0 &&
+        data.coverTheme is string && data.coverTheme.size() >= 4 && data.coverTheme.size() <= 20 &&
+        (data.coverTheme == 'vice' || data.coverTheme == 'tactical' || data.coverTheme == 'cyber' || data.coverTheme == 'speed' || data.coverTheme == 'code' || data.coverTheme == 'hardware') &&
+        data.status is string && data.status.size() >= 8 && data.status.size() <= 12 &&
+        (data.status == 'published' || data.status == 'archived') &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidComment(data) {
+      return data.keys().hasAll([
+          'id', 'postId', 'author', 'authorId', 'avatarSeed', 'content', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'postId', 'author', 'authorId', 'avatarSeed', 'content', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        data.id is string && data.id.size() >= 1 && data.id.size() <= 128 && data.id.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.postId is string && data.postId.size() >= 1 && data.postId.size() <= 128 && data.postId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.author is string && data.author.size() >= 1 && data.author.size() <= 80 &&
+        data.authorId is string && data.authorId.size() >= 1 && data.authorId.size() <= 128 && data.authorId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.avatarSeed is string && data.avatarSeed.size() >= 1 && data.avatarSeed.size() <= 80 &&
+        data.content is string && data.content.size() >= 1 && data.content.size() <= 2000 &&
+        data.status is string && data.status.size() >= 6 && data.status.size() <= 10 &&
+        (data.status == 'visible' || data.status == 'hidden') &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // Collection: /admins/{adminId}
+    match /admins/{adminId} {
+      allow get: if isVerifiedUser() && isValidId(adminId) && (request.auth.uid == adminId || isBootstrappedAdmin());
+      allow list: if isBootstrappedAdmin() && resource.data.role == 'admin';
+      allow create: if isBootstrappedAdmin() && isValidId(adminId) && isValidAdmin(incoming()) &&
+        incoming().uid == adminId &&
+        incoming().createdAt == request.time;
+      allow update: if isBootstrappedAdmin() && isValidId(adminId) && isValidAdmin(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['role']);
+      allow delete: if isBootstrappedAdmin() && isValidId(adminId);
+    }
+
+    // Collection: /posts/{postId}
+    match /posts/{postId} {
+      allow get: if isValidId(postId) && (resource.data.status == 'published' || isAdmin());
+      // Pillar 8: No get() or exists() inside allow list
+      allow list: if resource.data.status == 'published' || isBootstrappedAdmin();
+
+      allow create: if isVerifiedUser() && isValidId(postId) && isValidPost(incoming()) &&
+        incoming().id == postId &&
+        incoming().authorId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isAdmin();
+
+      allow update: if isVerifiedUser() && isValidId(postId) && isValidPost(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().authorId == existing().authorId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          // Tier 1: Admin full update or state correction
+          (incoming().diff(existing()).affectedKeys().hasOnly([
+            'slug', 'title', 'summary', 'content', 'category', 'categoryLabel',
+            'readTime', 'publishedAt', 'author', 'authorRole', 'tags',
+            'likes', 'views', 'coverTheme', 'status', 'updatedAt'
+          ]) && isAdmin()) ||
+          // Tier 2: Verified reader single-step like/unlike on active published post (Terminal state lock if archived)
+          (existing().status == 'published' && incoming().status == 'published' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['likes', 'updatedAt']) &&
+            (incoming().likes == existing().likes + 1 || incoming().likes == existing().likes - 1))
+        );
+
+      allow delete: if isVerifiedUser() && isValidId(postId) && isAdmin();
+
+      // Subcollection: /posts/{postId}/comments/{commentId}
+      match /comments/{commentId} {
+        allow get: if isValidId(postId) && isValidId(commentId) &&
+          (resource.data.status == 'visible' || isAdmin()) &&
+          get(/databases/$(database)/documents/posts/$(postId)).data.status == 'published';
+
+        // Pillar 8 Cost-Optimization Clause: No get() or exists() inside allow list
+        allow list: if resource.data.status == 'visible' || isBootstrappedAdmin();
+
+        allow create: if isVerifiedUser() && isValidId(postId) && isValidId(commentId) &&
+          isValidComment(incoming()) &&
+          incoming().id == commentId &&
+          incoming().postId == postId &&
+          incoming().authorId == request.auth.uid &&
+          incoming().status == 'visible' &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          get(/databases/$(database)/documents/posts/$(postId)).data.status == 'published';
+
+        allow update: if isVerifiedUser() && isValidId(postId) && isValidId(commentId) &&
+          isValidComment(incoming()) &&
+          incoming().id == existing().id &&
+          incoming().postId == existing().postId &&
+          incoming().authorId == existing().authorId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          get(/databases/$(database)/documents/posts/$(postId)).data.status == 'published' && (
+            // Tier 1: Admin moderation
+            (incoming().diff(existing()).affectedKeys().hasOnly(['content', 'status', 'updatedAt']) && isAdmin()) ||
+            // Tier 2: Comment author editing own visible comment (Terminal state lock if hidden)
+            (existing().authorId == request.auth.uid &&
+              existing().status == 'visible' &&
+              incoming().status == 'visible' &&
+              incoming().diff(existing()).affectedKeys().hasOnly(['content', 'updatedAt']))
+          );
+
+        allow delete: if isVerifiedUser() && isValidId(postId) && isValidId(commentId) &&
+          (isAdmin() || (existing().authorId == request.auth.uid &&
+            get(/databases/$(database)/documents/posts/$(postId)).data.status == 'published'));
+      }
+    }
+  }
+}

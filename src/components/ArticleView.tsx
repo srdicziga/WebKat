@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { User } from 'firebase/auth';
 import { BlogPost, Comment } from '../types';
 import { ThemeCover } from './ThemeCover';
+import {
+  subscribeToPostComments,
+  addCommentToFirestore,
+  loginWithGoogle,
+} from '../firebase';
 import {
   ArrowLeft,
   Heart,
@@ -10,37 +16,55 @@ import {
   Bookmark,
   BookmarkCheck,
   Send,
-  Sparkles,
+  LogIn,
 } from 'lucide-react';
 
 interface ArticleViewProps {
   post: BlogPost;
+  currentUser: User | null;
   onBack: () => void;
   onLikePost: (postId: string, e: React.MouseEvent) => void;
   isLiked: boolean;
   isBookmarked: boolean;
   onToggleBookmark: (postId: string, e: React.MouseEvent) => void;
-  onAddComment: (postId: string, comment: Comment) => void;
+  onAddLocalComment: (postId: string, comment: Comment) => void;
   allPosts: BlogPost[];
   onSelectRelated: (post: BlogPost) => void;
 }
 
 export const ArticleView: React.FC<ArticleViewProps> = ({
   post,
+  currentUser,
   onBack,
   onLikePost,
   isLiked,
   isBookmarked,
   onToggleBookmark,
-  onAddComment,
+  onAddLocalComment,
   allPosts,
   onSelectRelated,
 }) => {
   const [scrollProgress, setScrollProgress] = useState(0);
   const [copiedLink, setCopiedLink] = useState(false);
-  const [newAuthor, setNewAuthor] = useState('');
+  const [newAuthor, setNewAuthor] = useState(currentUser?.displayName || '');
   const [newCommentText, setNewCommentText] = useState('');
   const [commentSuccess, setCommentSuccess] = useState(false);
+  const [commentError, setCommentError] = useState('');
+  const [cloudComments, setCloudComments] = useState<Comment[]>([]);
+
+  useEffect(() => {
+    if (currentUser?.displayName && !newAuthor) {
+      setNewAuthor(currentUser.displayName);
+    }
+  }, [currentUser, newAuthor]);
+
+  // Subscribe to live Firestore comments for this post
+  useEffect(() => {
+    const unsubscribe = subscribeToPostComments(post.id, (liveComments) => {
+      setCloudComments(liveComments);
+    });
+    return () => unsubscribe();
+  }, [post.id]);
 
   // Sync window title for SEO
   useEffect(() => {
@@ -73,36 +97,51 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
     setTimeout(() => setCopiedLink(false), 2500);
   };
 
-  const handleShareTwitter = () => {
-    const text = encodeURIComponent(`${post.title} - na @WebKat`);
-    const url = encodeURIComponent(window.location.href);
-    window.open(`https://twitter.com/intent/tweet?text=${text}&url=${url}`, '_blank');
-  };
-
-  const handleSubmitComment = (e: React.FormEvent) => {
+  const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCommentText.trim()) return;
+    setCommentError('');
 
+    const authorName = newAuthor.trim().slice(0, 80) || currentUser?.displayName || 'Gostujoči Bralec';
+    const cleanText = newCommentText.trim().slice(0, 2000);
+
+    if (currentUser) {
+      try {
+        await addCommentToFirestore(post.id, authorName, cleanText);
+        setNewCommentText('');
+        setCommentSuccess(true);
+        setTimeout(() => setCommentSuccess(false), 3000);
+        return;
+      } catch (err: any) {
+        setCommentError('Komentar je bil shranjen lokalno.');
+      }
+    }
+
+    // Fallback local comment if user is not signed in
     const comment: Comment = {
       id: 'c_' + Date.now(),
-      author: newAuthor.trim() || 'Gostujoči Bralec',
-      avatarSeed: (newAuthor.trim() || 'gost').toLowerCase(),
-      content: newCommentText.trim(),
+      author: authorName,
+      avatarSeed: authorName.toLowerCase(),
+      content: cleanText,
       createdAt: 'Pravkar',
     };
 
-    onAddComment(post.id, comment);
+    onAddLocalComment(post.id, comment);
     setNewCommentText('');
     setCommentSuccess(true);
     setTimeout(() => setCommentSuccess(false), 3000);
   };
 
-  // Related posts in same category or others
-  const relatedPosts = allPosts
-    .filter((p) => p.id !== post.id)
-    .slice(0, 3);
+  // Combine cloud comments and initial/local comments without duplicates
+  const mergedComments = [
+    ...cloudComments,
+    ...(post.comments || []).filter((lc) => !cloudComments.some((cc) => cc.id === lc.id)),
+  ];
 
-  // Render markdown-like sections simply
+  // Related posts
+  const relatedPosts = allPosts.filter((p) => p.id !== post.id).slice(0, 3);
+
+  // Render markdown-like sections
   const renderFormattedContent = (rawText: string) => {
     const lines = rawText.split('\n');
     return lines.map((line, idx) => {
@@ -124,7 +163,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
         return (
           <blockquote
             key={idx}
-            className="my-6 rounded-r-lg border-l-2 border-cyan-400 bg-neutral-900/60 p-4 text-sm italic text-neutral-200"
+            className="my-6 rounded-xl border border-neutral-800 bg-neutral-900/60 p-4 text-sm italic text-neutral-200"
           >
             {line.replace('> ', '')}
           </blockquote>
@@ -239,7 +278,11 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
                 onClick={handleCopyLink}
                 className="inline-flex items-center gap-1 rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-neutral-300 hover:border-neutral-700 transition-colors"
               >
-                {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
+                {copiedLink ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                ) : (
+                  <Share2 className="w-3.5 h-3.5" />
+                )}
                 <span>{copiedLink ? 'Povezava kopirana!' : 'Deli'}</span>
               </button>
             </div>
@@ -252,9 +295,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
         </div>
 
         {/* Main Content Body */}
-        <div className="mt-8 text-neutral-200">
-          {renderFormattedContent(post.content)}
-        </div>
+        <div className="mt-8 text-neutral-200">{renderFormattedContent(post.content)}</div>
 
         {/* Tags list */}
         <div className="mt-10 pt-6 border-t border-neutral-800">
@@ -273,19 +314,36 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
 
         {/* Reader Comments Section */}
         <section className="mt-14 border-t border-neutral-800 pt-8">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
               <MessageSquare className="w-5 h-5 text-cyan-400" />
-              <span>Komentarji bralcev ({(post.comments || []).length})</span>
+              <span>Komentarji bralcev ({mergedComments.length})</span>
             </h3>
+
+            {!currentUser && (
+              <button
+                type="button"
+                onClick={() => loginWithGoogle()}
+                className="inline-flex items-center gap-1.5 text-xs text-cyan-400 hover:underline"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Prijava z Google računom za trajno objavo v bazo</span>
+              </button>
+            )}
           </div>
 
           {/* New Comment Form */}
-          <form onSubmit={handleSubmitComment} className="mt-6 rounded-xl border border-neutral-800 bg-neutral-900/50 p-4">
-            <h4 className="text-xs font-semibold text-neutral-300 mb-3">Dodaj svoj komentar ali vprašanje</h4>
+          <form
+            onSubmit={handleSubmitComment}
+            className="mt-6 rounded-xl border border-neutral-800 bg-neutral-900/50 p-4"
+          >
+            <h4 className="text-xs font-semibold text-neutral-300 mb-3">
+              Dodaj svoj komentar ali vprašanje
+            </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
               <input
                 type="text"
+                maxLength={80}
                 placeholder="Vaše ime ali vzdevek"
                 value={newAuthor}
                 onChange={(e) => setNewAuthor(e.target.value)}
@@ -294,16 +352,26 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
             </div>
             <textarea
               rows={3}
+              maxLength={2000}
               placeholder="Napišite vaše mnenje o igri ali razvoju..."
               value={newCommentText}
               onChange={(e) => setNewCommentText(e.target.value)}
               className="w-full rounded-lg border border-neutral-800 bg-neutral-950 p-3 text-xs text-white placeholder-neutral-500 focus:border-cyan-500 focus:outline-none"
             />
             <div className="mt-3 flex items-center justify-between">
-              {commentSuccess && (
-                <span className="text-xs text-emerald-400">Vaš komentar je bil uspešno objavljen!</span>
+              {commentSuccess ? (
+                <span className="text-xs text-emerald-400">
+                  Vaš komentar je bil uspešno objavljen!
+                </span>
+              ) : commentError ? (
+                <span className="text-xs text-amber-400">{commentError}</span>
+              ) : (
+                <span className="text-[11px] text-neutral-500">
+                  {currentUser
+                    ? `Prijavljeni kot ${currentUser.email} (shranjevanje v Firebase)`
+                    : 'Komentiranje kot gost'}
+                </span>
               )}
-              {!commentSuccess && <span />}
               <button
                 type="submit"
                 disabled={!newCommentText.trim()}
@@ -317,20 +385,21 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
 
           {/* Comment List */}
           <div className="mt-6 space-y-3">
-            {(post.comments || []).length === 0 ? (
+            {mergedComments.length === 0 ? (
               <p className="text-xs text-neutral-500 italic py-2">
                 Bodi prvi, ki bo komentiral to novico!
               </p>
             ) : (
-              (post.comments || []).map((comm) => (
-                <div key={comm.id} className="rounded-xl border border-neutral-800/80 bg-neutral-900/30 p-4">
+              mergedComments.map((comm) => (
+                <div
+                  key={comm.id}
+                  className="rounded-xl border border-neutral-800/80 bg-neutral-900/30 p-4"
+                >
                   <div className="flex items-center justify-between text-xs text-neutral-400">
                     <span className="font-semibold text-white">{comm.author}</span>
                     <span>{comm.createdAt}</span>
                   </div>
-                  <p className="mt-2 text-xs leading-relaxed text-neutral-300">
-                    {comm.content}
-                  </p>
+                  <p className="mt-2 text-xs leading-relaxed text-neutral-300">{comm.content}</p>
                 </div>
               ))
             )}
@@ -350,7 +419,11 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
                 }}
                 className="group rounded-xl border border-neutral-800 bg-neutral-900/40 p-4 hover:border-neutral-700 transition-all cursor-pointer"
               >
-                <ThemeCover theme={related.coverTheme} category={related.category} heightClass="h-28" />
+                <ThemeCover
+                  theme={related.coverTheme}
+                  category={related.category}
+                  heightClass="h-28"
+                />
                 <p className="mt-3 text-xs font-semibold text-white group-hover:text-cyan-400 transition-colors line-clamp-2">
                   {related.title}
                 </p>

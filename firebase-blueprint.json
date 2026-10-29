@@ -1,0 +1,259 @@
+{
+  "entities": {
+    "Admin": {
+      "title": "Admin",
+      "description": "Trusted administrator record for managing WebKat content.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the administrator.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "role": {
+          "type": "string",
+          "description": "Assigned role identifier.",
+          "enum": ["admin"],
+          "minLength": 5,
+          "maxLength": 10
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when admin record was created."
+        }
+      },
+      "required": ["uid", "role", "createdAt"]
+    },
+    "BlogPost": {
+      "title": "BlogPost",
+      "description": "Gaming or web development article published on WebKat.si.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the blog post.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "slug": {
+          "type": "string",
+          "description": "URL-friendly slug for SEO routing.",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^[a-z0-9\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Headline of the article.",
+          "minLength": 3,
+          "maxLength": 200
+        },
+        "summary": {
+          "type": "string",
+          "description": "SEO meta description and summary excerpt.",
+          "minLength": 5,
+          "maxLength": 500
+        },
+        "content": {
+          "type": "string",
+          "description": "Full Markdown body of the article.",
+          "minLength": 10,
+          "maxLength": 50000
+        },
+        "category": {
+          "type": "string",
+          "description": "Primary category key.",
+          "enum": ["gaming", "webdev", "seo", "hardware"],
+          "minLength": 3,
+          "maxLength": 20
+        },
+        "categoryLabel": {
+          "type": "string",
+          "description": "Display label for the category.",
+          "minLength": 2,
+          "maxLength": 50
+        },
+        "readTime": {
+          "type": "string",
+          "description": "Estimated reading time label.",
+          "minLength": 2,
+          "maxLength": 40
+        },
+        "publishedAt": {
+          "type": "string",
+          "description": "Human-readable Slovenian publication date.",
+          "minLength": 2,
+          "maxLength": 60
+        },
+        "author": {
+          "type": "string",
+          "description": "Display name of the article author.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "authorRole": {
+          "type": "string",
+          "description": "Role title of the author.",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "authorId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the author.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "tags": {
+          "type": "array",
+          "description": "Bounded list of up to 10 topic tags."
+        },
+        "likes": {
+          "type": "number",
+          "description": "Total number of reader likes."
+        },
+        "views": {
+          "type": "number",
+          "description": "Total article view count."
+        },
+        "coverTheme": {
+          "type": "string",
+          "description": "Visual theme identifier for the cover banner.",
+          "enum": ["vice", "tactical", "cyber", "speed", "code", "hardware"],
+          "minLength": 4,
+          "maxLength": 20
+        },
+        "status": {
+          "type": "string",
+          "description": "Publication lifecycle status.",
+          "enum": ["published", "archived"],
+          "minLength": 8,
+          "maxLength": 12
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Immutable server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the latest update."
+        }
+      },
+      "required": [
+        "id",
+        "slug",
+        "title",
+        "summary",
+        "content",
+        "category",
+        "categoryLabel",
+        "readTime",
+        "publishedAt",
+        "author",
+        "authorRole",
+        "authorId",
+        "tags",
+        "likes",
+        "views",
+        "coverTheme",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "Reader comment stored in a subcollection under a BlogPost.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique comment identifier.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "postId": {
+          "type": "string",
+          "description": "ID of the parent BlogPost.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "author": {
+          "type": "string",
+          "description": "Display name of the commenter.",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "authorId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the commenter.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "avatarSeed": {
+          "type": "string",
+          "description": "Avatar seed string.",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "content": {
+          "type": "string",
+          "description": "Comment text content.",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "status": {
+          "type": "string",
+          "description": "Moderation status of the comment.",
+          "enum": ["visible", "hidden"],
+          "minLength": 6,
+          "maxLength": 10
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Immutable server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of latest update."
+        }
+      },
+      "required": [
+        "id",
+        "postId",
+        "author",
+        "authorId",
+        "avatarSeed",
+        "content",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/Admin" },
+      "description": "Trusted administrator records."
+    },
+    "/posts/{postId}": {
+      "schema": { "$ref": "#/entities/BlogPost" },
+      "description": "Collection of gaming and web development blog posts."
+    },
+    "/posts/{postId}/comments/{commentId}": {
+      "schema": { "$ref": "#/entities/Comment" },
+      "description": "Subcollection of reader comments belonging to a specific blog post."
+    }
+  }
+}
