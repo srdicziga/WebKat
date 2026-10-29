@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - master
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -23,18 +24,38 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Normalize package versions for public npm registry
+        run: |
+          rm -f bun.lock package-lock.json
+          node -e '
+            const fs = require("fs");
+            const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            if (pkg.dependencies) {
+              pkg.dependencies["@google/genai"] = "latest";
+              pkg.dependencies["@tailwindcss/vite"] = "^4.0.9";
+              pkg.dependencies["@vitejs/plugin-react"] = "^4.3.4";
+              pkg.dependencies["vite"] = "^6.2.0";
+            }
+            if (pkg.devDependencies) {
+              pkg.devDependencies["tailwindcss"] = "^4.0.9";
+              pkg.devDependencies["typescript"] = "^5.8.2";
+            }
+            fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
+          '
+
       - name: Install dependencies
-        run: npm install
+        run: npm install --no-audit --no-fund
 
       - name: Build production dist folder
         run: npm run build
 
-      - name: Copy .htaccess into dist
+      - name: Ensure .htaccess is inside dist
         run: cp public/.htaccess dist/.htaccess || true
 
       - name: Commit and push dist folder to repository
         run: |
+          git checkout -- package.json || true
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -f dist/
-          git diff --staged --quiet || (git commit -m "chore: auto-build dist folder for cPanel [skip ci]" && git push)
+          git diff --staged --quiet || (git commit -m "chore: auto-build dist folder for cPanel [skip ci]" && git push origin HEAD:main)
