@@ -34,7 +34,7 @@ export const Hero: React.FC<HeroProps> = ({
           <div className="mt-8 flex flex-wrap items-center gap-4">
             <button
               onClick={onExploreBlog}
-              className="inline-flex items-center gap-2 rounded-lg bg-cyan-500 px-5 py-3 text-sm font-semibold text-neutral-950 transition-colors hover:bg-cyan-400"
+              className="inline-flex items-center gap-2 rounded-lg bg-orange-500 px-5 py-3 text-sm font-semibold text-neutral-950 transition-colors hover:bg-orange-400"
             >
               <span>Preberi Novice & Blog</span>
               <ArrowRight className="w-4 h-4" />
